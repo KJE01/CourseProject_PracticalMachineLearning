@@ -1,0 +1,82 @@
+---
+title: "Course Project Practical Machine Learning"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). The prediction model is also used to predict 20 different test cases.
+
+## Loading and cleaning the data and cross validation
+
+The following libraries are used. Make sure they have been installed first.
+
+```{r}
+library(dplyr, warn.conflicts=F, quietly=T)
+library(caret, warn.conflicts=F, quietly=T)
+library(randomForest, warn.conflicts=F, quietly=T)
+```
+
+First the testing and training data is loaded. #DIV/0 string and empty string were replaced by NA values.
+
+```{r, loading data, results='hide'}
+Urltrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+Urltest <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(Urltrain), header=TRUE, sep=",", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(Urltest), header=TRUE, sep=",", na.strings=c("NA","#DIV/0!",""))
+```
+
+The training data is then randomly split into a training (75%) and validation (25%) data set, based on a pseudo random seed 1000. This to be able to do a cross validation and to test the accuracy.
+
+```{r, cross validation, results='hide'}
+set.seed(1000)
+inTrain = createDataPartition(training$classe, p = 0.75, list=FALSE)
+train = training[inTrain,]
+validation = training[-inTrain,]
+```
+
+## Exploratory data analysis
+Exploratory data analysis shows that out of the `r nrow(train)` observations in the training set, `r sum(!complete.cases(train))` observations are not complete. It appears that this is caused by multiple variables/columns for which (almost) all observations are missing (NAs). As this is such a large percentage, the missing data won't be filled with e.g. the mean or median, but all variables/columns with NAs will be removed from the training, the validation, and the test set. Also the people identification, new_window, and num_window (first 7 columns) are removed.
+
+```{r}
+train_clean <- train[sapply(train, function(x) !any(is.na(x)))]
+train_clean <- train_clean[,-(1:7)]
+validation_clean <- validation[sapply(validation, function(x) !any(is.na(x)))]
+validation_clean <- validation_clean[,-(1:7)]
+test_clean <- testing[sapply(testing, function(x) !any(is.na(x)))] 
+test_clean <- test_clean[,-(1:7)]
+```
+
+## Fitting
+
+A gradient boosting machine and a random forest model are used to fit the training data. All remaining variables are used as predictors.
+
+```{r, results='hide'}
+FitGBM <- train(classe~., data=train_clean, method="gbm")
+FitRF <- randomForest(classe~., data=train_clean)
+```
+
+
+## Testing
+
+Both fitted models are then used to predict the validation set and the predictions are compared to the actual data.
+
+```{r}
+confusionMatrix(predict(FitGBM, validation_clean), validation_clean$classe)
+confusionMatrix(predict(FitRF, validation_clean), validation_clean$classe)
+```
+
+The random forest model gives better out of sample results, e.g. the accuracy and the kappa are higher. Therfore the random forest model will be used to predict the 20 test cases.
+
+## Prediction of 20 different test cases
+
+The fitted random forest model is used to predict the 20 different test cases.
+
+```{r}
+predict(FitRF, test_clean, type="class")
+```
+
+
